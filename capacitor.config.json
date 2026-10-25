@@ -1,1 +1,1 @@
-{"appId":"com.cinejuntos.app","appName":"Cine Juntos MR","webDir":"www"}
+{"appId":"com.cinejuntos.app","appName":"Cine Juntos MR","webDir":"www","server":{"androidScheme":"http","cleartext":true},"android":{"allowMixedContent":true},"plugins":{"CapacitorHttp":{"enabled":true}}}
