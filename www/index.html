@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cine Juntos MR</title>
+<style>
+:root{--bg:#faf7f5;--fg:#2a2022;--mut:#7a6b6e;--card:#fff;--acc:#d6336c;--ok:#2f9e44;--bad:#e03131}
+@media (prefers-color-scheme:dark){:root{--bg:#141012;--fg:#f3eaec;--mut:#a89aa0;--card:#1f191c;--acc:#f06595;--ok:#51cf66;--bad:#ff6b6b;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+main{max-width:960px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 8px}
+.card{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+video{width:100%;max-height:70vh;background:#000;border-radius:12px;display:none}
+.pick{display:block;text-align:center;border:2px dashed var(--acc);border-radius:12px;padding:28px 12px;cursor:pointer;color:var(--acc);font-weight:600;margin-bottom:14px}
+.pick input{display:none}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad);display:inline-block}.dot.on{background:var(--ok)}
+.pill{font-size:.85rem;color:var(--mut)}
+button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
+input[type=text]{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--mut);background:var(--bg);color:var(--fg);min-width:0;flex:1;width:100%;box-sizing:border-box;margin-bottom:8px}
+.warn{color:var(--bad)}
+.clock{font-size:2.6rem;font-weight:700;text-align:center;margin:8px 0;font-variant-numeric:tabular-nums}
+#xmsg{font-weight:600;color:var(--acc);min-height:1.4em}
+</style></head><body><main>
+<h1>🍿 Cine Juntos MR</h1>
+<div class="card" id="join">
+  <input type="text" id="srv" placeholder="Servidor (ej. cine-xxxx.onrender.com)" autocapitalize="off">
+  <input type="text" id="code" placeholder="Código de sala (el mismo para los dos)" autocapitalize="off">
+  <button id="go">Entrar</button>
+  <div class="pill">Usen un código difícil de adivinar: es la "llave" de su sala.</div>
+</div>
+<div id="app" style="display:none">
+  <div class="card"><div class="row"><span class="dot" id="dot"></span><strong id="status">Conectando…</strong></div>
+  <div class="pill" id="info">Elige la película…</div></div>
+  <label class="pick" id="pick">🎬 Elegir el archivo de la película (el mismo en ambos)
+    <input type="file" id="file" accept="video/*,.mkv"></label>
+  <video id="v" controls playsinline></video>
+  <div class="card" id="tools" style="display:none"><div class="row">
+    <button id="resync">Sincronizar con mi pareja</button><span class="pill" id="drift">—</span></div>
+    <div class="pill warn" id="mismatch"></div></div>
+  <div class="card"><strong>📺 Modo app externa (VLC, etc.)</strong>
+    <div class="pill">Reloj compartido para dar play juntos en otra app.</div>
+    <div class="clock" id="clock">00:00</div><div id="xmsg"></div>
+    <div class="row"><button id="xs">▶ Iniciar (3-2-1)</button><button id="xp">⏸ Pausar</button><button id="xr">▶ Reanudar (3-2-1)</button></div>
+    <div class="row" style="margin-top:10px"><input type="text" id="xin" placeholder="Mi minuto (mm:ss)" inputmode="numeric" style="margin:0"><button id="xm">¿Cómo vas?</button></div>
+    <div class="pill" id="xdiff">Escribe en qué minuto va tu video; tu pareja hace lo mismo.</div></div>
+</div></main>
+<script>
+const $=id=>document.getElementById(id), v=$('v'), now=()=>Date.now();
+let room=null, meta={name:'',size:0}, quiet=0, me=null, others=[];
+const mute=(ms=400)=>{quiet=now()+ms}, muted=()=>now()<quiet;
+
+function makeRoom(url,code,onState){
+  let ws,id=null,pres={},open=false;const lh={},ph=[];
+  const api={
+    emit:(topic,data)=>{if(open)ws.send(JSON.stringify({t:'emit',topic,data}));return Promise.resolve()},
+    presence:patch=>{Object.assign(pres,patch);if(open)ws.send(JSON.stringify({t:'pres',patch}));return Promise.resolve()},
+    on:(t,f)=>{(lh[t]=lh[t]||[]).push(f)}, onPeers:f=>{ph.push(f)}, connected:()=>open};
+  (function conn(){
+    ws=new WebSocket(url);
+    ws.onopen=()=>{open=true;ws.send(JSON.stringify({t:'join',room:code,pres}));onState(true)};
+    ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+      if(m.t==='hello')id=m.id;
+      else if(m.t==='msg'){const mine=m.from===id;(lh[m.topic]||[]).forEach(f=>f({topic:m.topic,data:m.data,peer:m.from,isMe:mine,sameTab:mine,kind:'viewer'}))}
+      else if(m.t==='peers'){const l=m.list.map(p=>({peer:p.id,isMe:p.id===id,sameTab:p.id===id,kind:'viewer',presence:p.pres||{}}));ph.forEach(f=>f({peers:l}))}};
+    ws.onclose=()=>{open=false;onState(false);setTimeout(conn,2000)};
+    ws.onerror=()=>{try{ws.close()}catch(e){}};
+  })();
+  return api;
+}
+
+$('file').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  v.src=URL.createObjectURL(f);v.style.display='block';$('pick').style.display='none';$('tools').style.display='block';
+  meta={name:f.name,size:f.size};$('info').textContent='Película: '+f.name;pushPresence();
+});
+function pushPresence(){if(room)room.presence({t:v.currentTime||0,p:!v.paused,at:now(),n:meta.name,s:meta.size,hasFile:!!meta.size})}
+function send(a){if(!room||muted())return;room.emit('ctl',{a,t:v.currentTime,at:now()})}
+v.addEventListener('play',()=>send('play'));v.addEventListener('pause',()=>send('pause'));
+v.addEventListener('seeked',()=>send(v.paused?'pause':'play'));
+function apply(m){
+  const d=m.data||{};if(typeof d.t!=='number')return;mute(600);
+  const lat=d.a==='play'?Math.min(2,Math.max(0,(now()-d.at)/1000)):0,target=d.t+lat;
+  if(Math.abs(v.currentTime-target)>0.25)v.currentTime=target;
+  if(d.a==='play'&&v.paused)v.play().catch(()=>{$('info').textContent='Toca ▶ para permitir la reproducción'});
+  if(d.a==='pause'&&!v.paused)v.pause();
+}
+function peerPos(p){const s=p.presence||{};if(typeof s.t!=='number')return null;return s.t+(s.p?Math.min(2,Math.max(0,(now()-s.at)/1000)):0)}
+$('resync').onclick=()=>{const o=others[0];if(!o)return;const t=peerPos(o);if(t==null)return;mute(600);v.currentTime=t;
+  if(o.presence.p&&v.paused)v.play().catch(()=>{});if(!o.presence.p&&!v.paused)v.pause()};
+setInterval(()=>{
+  pushPresence();const o=others[0];if(!o||!me||!meta.size)return;const t=peerPos(o);if(t==null)return;
+  const diff=t-v.currentTime;$('drift').textContent='Diferencia: '+(diff>=0?'+':'')+diff.toFixed(2)+' s';
+  if(me.peer<=o.peer||v.paused||!o.presence.p){v.playbackRate=1;return}
+  if(Math.abs(diff)>1.5){mute(600);v.currentTime=t;v.playbackRate=1}
+  else if(diff>0.12)v.playbackRate=1.05;else if(diff<-0.12)v.playbackRate=0.95;else v.playbackRate=1;
+},1000);
+function render(peers){
+  me=peers.find(p=>p.isMe)||null;others=peers.filter(p=>!p.isMe);const on=others.length>0,o=others[0];
+  $('dot').classList.toggle('on',on);$('status').textContent=on?'Tu pareja está conectada':'Esperando a tu pareja…';
+  $('mismatch').textContent=(o&&o.presence.hasFile&&meta.size&&o.presence.s!==meta.size)?'⚠️ Los archivos parecen distintos (tamaño diferente). Usen la misma versión.':'';
+  extPeers(o);
+}
+
+let X={base:0,runFrom:null,myOff:null,lastC:0},ac=null;
+document.addEventListener('click',()=>{try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();ac.resume()}catch(e){}});
+function beep(f,d){try{if(!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=.2;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+const pad=n=>String(n).padStart(2,'0');
+function fmt(s){s=Math.floor(Math.max(0,s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+':':'')+pad(m)+':'+pad(s%60)}
+function xEl(){return X.runFrom!=null?X.base+Math.max(0,(now()-X.runFrom)/1000):X.base}
+function xEmit(o){if(room)room.emit('ctl',Object.assign({k:'ext',at:now()},o))}
+function xHandle(d){
+  if(d.a==='start'){X.base=0;X.runFrom=d.go;X.myOff=null;$('xmsg').textContent='Iniciando…'}
+  else if(d.a==='pause'&&X.runFrom!=null){X.base+=Math.max(0,(d.at-X.runFrom)/1000);X.runFrom=null;beep(440,.35);$('xmsg').textContent='⏸ Pausa en '+fmt(X.base)}
+  else if(d.a==='resume'&&X.runFrom==null){X.runFrom=d.go;$('xmsg').textContent='Reanudando desde '+fmt(X.base)}
+}
+setInterval(()=>{const rem=X.runFrom!=null?(X.runFrom-now())/1000:0,c=rem>0?Math.ceil(rem):0;
+  if(c!==X.lastC){if(c>0)beep(660,.12);else if(X.lastC>0){beep(1000,.4);$('xmsg').textContent='▶ ¡YA!'}X.lastC=c}
+  $('clock').textContent=c>0?String(c):fmt(xEl())},100);
+$('xs').onclick=()=>xEmit({a:'start',go:now()+4000});$('xp').onclick=()=>xEmit({a:'pause'});$('xr').onclick=()=>xEmit({a:'resume',go:now()+4000});
+$('xm').onclick=()=>{const p=$('xin').value.trim().split(':').map(Number);
+  if(!p.length||p.some(isNaN)){$('xdiff').textContent='Formato: mm:ss o h:mm:ss';return}
+  X.myOff=p.reduce((a,b)=>a*60+b,0)-xEl();if(room)room.presence({xo:X.myOff});extPeers(others[0])};
+function extPeers(o){
+  if(X.myOff==null)return;const xo=o&&o.presence&&o.presence.xo;
+  if(typeof xo!=='number'){$('xdiff').textContent='Esperando que tu pareja comparta su minuto…';return}
+  const d=xo-X.myOff,a=Math.abs(d).toFixed(1);
+  $('xdiff').textContent=Math.abs(d)<.5?'✅ Sincronizados':(d>0?'Tu pareja va '+a+' s adelante → avanza tu video '+a+' s':'Tu pareja va '+a+' s atrás → retrocede tu video '+a+' s');
+}
+
+try{$('srv').value=localStorage.getItem('cj_srv')||'';$('code').value=localStorage.getItem('cj_code')||''}catch(e){}
+$('go').onclick=()=>{
+  let s=$('srv').value.trim(),c=$('code').value.trim();if(!s||!c)return;
+  s=s.replace(/^https:\/\//,'wss://').replace(/^http:\/\//,'ws://');if(!/^wss?:\/\//.test(s))s='wss://'+s;
+  try{localStorage.setItem('cj_srv',$('srv').value.trim());localStorage.setItem('cj_code',c)}catch(e){}
+  $('join').style.display='none';$('app').style.display='block';
+  room=makeRoom(s,c,ok=>{if(!ok){$('dot').classList.remove('on');$('status').textContent='Conectando al servidor… (puede tardar ~1 min la 1ª vez)';others=[]}else pushPresence()});
+  room.on('ctl',m=>{const d=m.data||{};if(d.k==='ext'){xHandle(d);return}if(m.isMe)return;apply(m)});
+  room.onPeers(ch=>render(ch.peers));
+};
+</script></body></html>
