@@ -18,6 +18,9 @@ video{width:100%;max-height:70vh;background:#000;border-radius:12px;display:none
 button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
 input[type=text]{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--mut);background:var(--bg);color:var(--fg);min-width:0;flex:1;width:100%;box-sizing:border-box;margin-bottom:8px}
 .warn{color:var(--bad)}
+button,input[type=text]{min-height:44px}
+button:focus,input:focus,.pick:focus{outline:3px solid var(--acc);outline-offset:3px}
+@media (min-width:1100px){body{font-size:20px}main{max-width:1280px}button{font-size:1.05rem}}
 #vw{position:relative}
 #vw.fs #fsb{display:block}
 video::-webkit-media-controls-fullscreen-button{display:none}
@@ -44,7 +47,7 @@ video::-webkit-media-controls-fullscreen-button{display:none}
     <div id="plist" style="display:none;margin-top:8px"><input type="text" id="pf" placeholder="Buscar en la lista…"><div id="pl" class="pl"></div></div>
     <div class="pill warn" id="uerr"></div>
   </div>
-  <label class="pick" id="pick">🎬 Elegir el archivo de la película (el mismo en ambos)
+  <label class="pick" id="pick" tabindex="0">🎬 Elegir el archivo de la película (el mismo en ambos)
     <input type="file" id="file" accept="video/*,.mkv"></label>
   <div id="vw"><video id="v" controls controlsList="nofullscreen" playsinline></video><button id="fsb" title="Pantalla completa">⛶</button></div>
   <div class="card" id="tools" style="display:none"><div class="row">
@@ -174,6 +177,7 @@ $('loadurl').onclick=()=>{const u=$('url').value.trim();if(!u)return;
 const vw=$('vw'),fsOn=()=>vw.classList.contains('fs');
 async function setFs(on){
   vw.classList.toggle('fs',on);$('fsb').textContent=on?'✕':'⛶';document.body.style.overflow=on?'hidden':'';
+  if(on){if(document.activeElement)document.activeElement.blur();vw.setAttribute('tabindex','-1');vw.focus()}else{$('fs2').focus()}
   try{if(on){if(vw.requestFullscreen)await vw.requestFullscreen();try{await screen.orientation.lock('landscape')}catch(e){}}
     else{if(document.fullscreenElement)await document.exitFullscreen();try{screen.orientation.unlock()}catch(e){}}}catch(e){}
 }
@@ -181,6 +185,26 @@ $('fsb').onclick=()=>setFs(!fsOn());
 $('fs2').onclick=()=>setFs(true);
 v.addEventListener('dblclick',()=>setFs(!fsOn()));
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&fsOn())setFs(false)});
+
+$('pick').addEventListener('keydown',e=>{if(e.key==='Enter')$('file').click()});
+const togglePlay=()=>{if(v.paused)v.play().catch(()=>{});else v.pause()};
+document.addEventListener('keydown',e=>{
+  const k=e.key,t=e.target&&e.target.tagName;
+  if(t==='INPUT')return;
+  if(k==='MediaPlayPause'||k==='MediaPlay'||k==='MediaPause'){e.preventDefault();togglePlay()}
+  else if(k==='MediaFastForward'){e.preventDefault();v.currentTime+=30}
+  else if(k==='MediaRewind'){e.preventDefault();v.currentTime-=30}
+  else if(fsOn()&&k==='ArrowRight'){e.preventDefault();v.currentTime+=10}
+  else if(fsOn()&&k==='ArrowLeft'){e.preventDefault();v.currentTime-=10}
+  else if(fsOn()&&(k==='Enter'||k===' ')&&t!=='BUTTON'){e.preventDefault();togglePlay()}
+  else if(fsOn()&&(k==='Escape'||k==='GoBack'||k==='BrowserBack')){setFs(false)}
+});
+let wl=null;
+async function keepAwake(){try{if(navigator.wakeLock&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}}catch(e){}}
+v.addEventListener('play',keepAwake);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!v.paused)keepAwake()});
+try{const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;
+  if(A)A.addListener('backButton',()=>{if(fsOn())setFs(false);else A.exitApp()})}catch(e){}
 
 try{$('srv').value=localStorage.getItem('cj_srv')||'';$('code').value=localStorage.getItem('cj_code')||''}catch(e){}
 $('go').onclick=()=>{

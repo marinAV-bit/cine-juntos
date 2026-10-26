@@ -12,6 +12,7 @@ jobs:
       - run: npm install
       - run: cp node_modules/hls.js/dist/hls.min.js www/hls.min.js
       - run: npx cap add android
+      - run: python3 patch_manifest.py
       - run: pip install pillow
       - run: python3 make_icon.py
       - run: npx capacitor-assets generate --android
