@@ -18,6 +18,10 @@ video{width:100%;max-height:70vh;background:#000;border-radius:12px;display:none
 button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
 input[type=text]{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--mut);background:var(--bg);color:var(--fg);min-width:0;flex:1;width:100%;box-sizing:border-box;margin-bottom:8px}
 .warn{color:var(--bad)}
+#vw{position:relative}
+#fsb{position:absolute;top:8px;right:8px;display:none;background:rgba(0,0,0,.55);padding:6px 12px;font-size:1.3rem;z-index:2}
+#vw.fs{position:fixed;inset:0;z-index:9999;background:#000;display:flex;align-items:center;justify-content:center}
+#vw.fs video{height:100%;max-height:100vh;width:100%;border-radius:0}
 .pl{max-height:220px;overflow:auto}.pl div{padding:8px 4px;border-bottom:1px solid var(--mut);cursor:pointer}
 .clock{font-size:2.6rem;font-weight:700;text-align:center;margin:8px 0;font-variant-numeric:tabular-nums}
 #xmsg{font-weight:600;color:var(--acc);min-height:1.4em}
@@ -40,7 +44,7 @@ input[type=text]{font:inherit;padding:8px 10px;border-radius:10px;border:1px sol
   </div>
   <label class="pick" id="pick">🎬 Elegir el archivo de la película (el mismo en ambos)
     <input type="file" id="file" accept="video/*,.mkv"></label>
-  <video id="v" controls playsinline></video>
+  <div id="vw"><video id="v" controls controlsList="nofullscreen" playsinline></video><button id="fsb" title="Pantalla completa">⛶</button></div>
   <div class="card" id="tools" style="display:none"><div class="row">
     <button id="resync">Sincronizar con mi pareja</button><span class="pill" id="drift">—</span></div>
     <div class="pill warn" id="mismatch"></div></div>
@@ -78,7 +82,7 @@ function makeRoom(url,code,onState){
 
 $('file').addEventListener('change',e=>{
   const f=e.target.files[0];if(!f)return;
-  if(hls){hls.destroy();hls=null}curUrl='';$('uerr').textContent='';v.src=URL.createObjectURL(f);v.style.display='block';$('pick').style.display='none';$('tools').style.display='block';
+  if(hls){hls.destroy();hls=null}curUrl='';$('uerr').textContent='';v.src=URL.createObjectURL(f);v.style.display='block';$('fsb').style.display='block';$('pick').style.display='none';$('tools').style.display='block';
   meta={name:f.name,size:f.size};$('info').textContent='Película: '+f.name;pushPresence();
 });
 function pushPresence(){if(room)room.presence({t:v.currentTime||0,p:!v.paused,at:now(),n:meta.name,s:meta.size,hasFile:!!meta.size,u:curUrl})}
@@ -140,7 +144,7 @@ let hls=null,curUrl='',PL=[];
 function loadSrc(u){
   if(!/^https?:\/\//i.test(u))return;
   if(hls){hls.destroy();hls=null}
-  curUrl=u;mute(1500);v.style.display='block';$('tools').style.display='block';$('pick').style.display='none';
+  curUrl=u;mute(1500);v.style.display='block';$('fsb').style.display='block';$('tools').style.display='block';$('pick').style.display='none';
   meta={name:u,size:1};$('info').textContent='Enlace cargado';$('uerr').textContent='';
   if(/\.m3u8(\?|$)/i.test(u)&&window.Hls&&Hls.isSupported()){hls=new Hls();hls.loadSource(u);hls.attachMedia(v);
     hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal)$('uerr').textContent='No se pudo cargar el stream (HLS).'})}
@@ -164,6 +168,16 @@ function drawPl(){const q=$('pf').value.toLowerCase(),box=$('pl');box.textConten
 $('pf').oninput=drawPl;
 $('loadurl').onclick=()=>{const u=$('url').value.trim();if(!u)return;
   if(/\.m3u(\?|$)|get\.php/i.test(u)&&!/\.m3u8/i.test(u))openPlaylist(u);else shareUrl(u)};
+
+const vw=$('vw'),fsOn=()=>vw.classList.contains('fs');
+async function setFs(on){
+  vw.classList.toggle('fs',on);$('fsb').textContent=on?'✕':'⛶';document.body.style.overflow=on?'hidden':'';
+  try{if(on){if(vw.requestFullscreen)await vw.requestFullscreen();try{await screen.orientation.lock('landscape')}catch(e){}}
+    else{if(document.fullscreenElement)await document.exitFullscreen();try{screen.orientation.unlock()}catch(e){}}}catch(e){}
+}
+$('fsb').onclick=()=>setFs(!fsOn());
+v.addEventListener('dblclick',()=>setFs(!fsOn()));
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&fsOn())setFs(false)});
 
 try{$('srv').value=localStorage.getItem('cj_srv')||'';$('code').value=localStorage.getItem('cj_code')||''}catch(e){}
 $('go').onclick=()=>{
