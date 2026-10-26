@@ -12,6 +12,9 @@ jobs:
       - run: npm install
       - run: cp node_modules/hls.js/dist/hls.min.js www/hls.min.js
       - run: npx cap add android
+      - run: pip install pillow
+      - run: python3 make_icon.py
+      - run: npx capacitor-assets generate --android
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
